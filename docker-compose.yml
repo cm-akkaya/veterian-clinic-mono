@@ -37,7 +37,7 @@ services:
       - POSTGRES_USER=petclinic
       - POSTGRES_DB=petclinic
     volumes:
-      - pgdata:/var/lib/postgresql/data
+      - pgdata:/var/lib/postgresql
     deploy:
       resources:
         limits:
