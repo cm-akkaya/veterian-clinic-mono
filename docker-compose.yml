@@ -1,3 +1,4 @@
+# Commands: docker compose down   docker compose build app   docker compose up -d    ./mvnw clean package -DskipTests
 services:
   app:
     container_name: app
