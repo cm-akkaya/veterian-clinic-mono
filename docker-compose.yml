@@ -1,18 +1,20 @@
 services:
-  mysql:
-    image: mysql:9.7
+  app:
+    build:
+      context: .
+      dockerfile: Dockerfile
     ports:
-      - "3306:3306"
+      - "8080:8080"
     environment:
-      - MYSQL_ROOT_PASSWORD=
-      - MYSQL_ALLOW_EMPTY_PASSWORD=true
-      - MYSQL_USER=petclinic
-      - MYSQL_PASSWORD=petclinic
-      - MYSQL_DATABASE=petclinic
-    volumes:
-      - "./conf.d:/etc/mysql/conf.d:ro"
+      - SPRING_PROFILES_ACTIVE=postgres
+      - SPRING_DATASOURCE_URL=jdbc:postgresql://postgres:5432/petclinic
+      - SPRING_DATASOURCE_USERNAME=petclinic
+      - SPRING_DATASOURCE_PASSWORD=petclinic
+    depends_on:
+      - postgres
+
   postgres:
-    image: postgres:18.4
+    image: postgres:18.1
     ports:
       - "5432:5432"
     environment:
