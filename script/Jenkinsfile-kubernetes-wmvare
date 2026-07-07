@@ -1,0 +1,193 @@
+pipeline {
+    agent any
+
+    environment {
+        JAVA_HOME            = "/usr/lib/jvm/java-21-openjdk-amd64"
+        PATH                 = "${JAVA_HOME}/bin:${PATH}:/usr/local/bin"
+
+        APP_NAME             = "veterian-clinic-mono"
+        GIT_REPO_URL         = "https://github.com/cm-akkaya/veterian-clinic-mono"
+        GIT_BRANCH           = "main"
+
+        HARBOR_FQDN          = "172.17.160.76"
+        HARBOR_PROJECT       = "ngn-list-vmware"
+        IMAGE_NAME           = "spring-ngn-app"
+        IMAGE_TAG            = "${BUILD_NUMBER}"          // Her build'e unique tag
+        FULL_IMAGE           = "${HARBOR_FQDN}/${HARBOR_PROJECT}/${IMAGE_NAME}:${IMAGE_TAG}"
+
+        // Jenkins Credentials'da tanımlı olmalı:
+        // Kind: "Username with password"  |  ID: harbor-robot-credentials
+        HARBOR_CREDENTIALS   = "harbor-robot-credentials"
+
+        // ===== Kubernetes deploy ayarları =====
+        // Jenkins Credentials'da tanımlı olmalı:
+        // Kind: "Secret file"  |  ID: k8s-ngn-vmware-admin-conf  |  File: admin.conf
+        K8S_KUBECONFIG_CRED  = "k8s-ngn-vmware-admin-conf"
+        K8S_NAMESPACE        = "veterinary-clinic"
+        K8S_DEPLOYMENT       = "spring-ngn-app"
+        K8S_CONTAINER        = "spring-ngn-app"            // Deployment içindeki container adı
+
+        // Sağlık kontrolü için Envoy Gateway üzerinden erişilen gerçek URL
+        // (TLS gerçek CA'lı sertifika kullanıyor, -k gerekmiyor)
+        HEALTH_CHECK_URL     = "https://ngnk8svmware.ngncloud.com.tr/actuator/health"
+    }
+
+    options {
+        buildDiscarder(logRotator(numToKeepStr: '10'))   // Son 10 build'i tut
+        timestamps()                                      // Log satırlarına zaman damgası
+        timeout(time: 30, unit: 'MINUTES')               // Toplam pipeline timeout
+    }
+
+    stages {
+
+        // ------------------------------------------------------------------ //
+        stage('Checkout') {
+        // ------------------------------------------------------------------ //
+            steps {
+                echo "==> Checking out branch: ${GIT_BRANCH}"
+                checkout([
+                    $class           : 'GitSCM',
+                    branches         : [[name: "*/${GIT_BRANCH}"]],
+                    userRemoteConfigs: [[url: "${GIT_REPO_URL}"]]
+                ])
+                sh 'echo "Workspace: ${WORKSPACE}" && ls -la'
+            }
+        }
+
+        // ------------------------------------------------------------------ //
+        stage('Build Docker Image') {
+        // ------------------------------------------------------------------ //
+            steps {
+                echo "==> Docker image build ediliyor: ${FULL_IMAGE}"
+                sh '''
+                    docker build -t ${FULL_IMAGE} .
+                '''
+            }
+            post {
+                success { echo "✅ Docker image build başarılı." }
+                failure { echo "❌ Docker image build başarısız. Logları kontrol et." }
+            }
+        }
+
+        // ------------------------------------------------------------------ //
+        stage('Harbor Login') {
+        // ------------------------------------------------------------------ //
+            steps {
+                echo "==> Harbor'a login olunuyor: ${HARBOR_FQDN}"
+                withCredentials([usernamePassword(
+                    credentialsId : "${HARBOR_CREDENTIALS}",
+                    usernameVariable: 'HARBOR_USER',
+                    passwordVariable: 'HARBOR_PASS'
+                )]) {
+                    sh '''
+                    echo "${HARBOR_PASS}" | docker login "${HARBOR_FQDN}" -u "${HARBOR_USER}" --password-stdin
+                    '''
+                }
+            }
+        }
+
+        // ------------------------------------------------------------------ //
+        stage('Push Image to Harbor') {
+        // ------------------------------------------------------------------ //
+            steps {
+                echo "==> İmaj Harbor'a push ediliyor: ${FULL_IMAGE}"
+                sh '''
+                    docker push ${FULL_IMAGE}
+                '''
+            }
+            post {
+                success { echo "✅ İmaj Harbor'a push edildi." }
+                failure { echo "❌ Harbor push başarısız." }
+            }
+        }
+
+        // ------------------------------------------------------------------ //
+        stage('Deploy to Kubernetes') {
+        // ------------------------------------------------------------------ //
+            steps {
+                echo "==> Kubernetes'e deploy ediliyor: ${K8S_DEPLOYMENT} -> ${FULL_IMAGE}"
+                withCredentials([file(credentialsId: "${K8S_KUBECONFIG_CRED}", variable: 'KUBECONFIG')]) {
+                    sh '''
+                        # Cluster erişimi hızlı bir sağlık kontrolü
+                        kubectl --request-timeout=10s get nodes
+
+                        # Sadece image tag'ini güncelle - replica/resource/probe ayarlarına dokunmaz
+                        kubectl set image deployment/${K8S_DEPLOYMENT} \
+                            ${K8S_CONTAINER}=${FULL_IMAGE} \
+                            -n ${K8S_NAMESPACE} \
+                            --record=true
+
+                        # Rolling update'in başarıyla tamamlanmasını bekle (max 5 dk)
+                        # Başarısız olursa (ör. yeni Pod CrashLoopBackOff) burada timeout ile düşer
+                        kubectl rollout status deployment/${K8S_DEPLOYMENT} \
+                            -n ${K8S_NAMESPACE} \
+                            --timeout=300s
+                    '''
+                }
+            }
+            post {
+                success { echo "✅ Kubernetes deploy tamamlandı: ${FULL_IMAGE}" }
+                failure {
+                    echo "❌ Deploy başarısız veya rollout timeout oldu. Otomatik rollback yapılıyor..."
+                    withCredentials([file(credentialsId: "${K8S_KUBECONFIG_CRED}", variable: 'KUBECONFIG')]) {
+                        sh '''
+                            kubectl rollout undo deployment/${K8S_DEPLOYMENT} -n ${K8S_NAMESPACE} || true
+                            kubectl rollout status deployment/${K8S_DEPLOYMENT} -n ${K8S_NAMESPACE} --timeout=180s || true
+                        '''
+                    }
+                    echo "⚠️  Rollback denendi - önceki çalışan image'a geri dönülmüş olmalı. Logları kontrol edin."
+                }
+            }
+        }
+
+        // ------------------------------------------------------------------ //
+        stage('Health Check') {
+        // ------------------------------------------------------------------ //
+            steps {
+                echo "==> Rollout tamamlandı, uygulama erişim kontrolü yapılıyor..."
+                sh '''
+                    # rollout status zaten Pod'ların Ready olduğunu doğruladı,
+                    # ama Envoy Gateway/Service seviyesinde de erişimi teyit edelim.
+                    # Küçük bir retry döngüsü ile (Gateway'in yeni endpoint'i
+                    # algılaması birkaç saniye sürebilir):
+                    for i in $(seq 1 10); do
+                        if curl -sf "${HEALTH_CHECK_URL}"; then
+                            echo ""
+                            echo "✅ Uygulama sağlıklı (HTTPS üzerinden doğrulandı)"
+                            exit 0
+                        fi
+                        echo "Deneme $i/10 başarısız, 5 saniye sonra tekrar denenecek..."
+                        sleep 5
+                    done
+                    echo "⚠️  Health check 10 denemede başarısız oldu - Pod'lar Ready ama Gateway/DNS seviyesinde sorun olabilir, manuel kontrol edin."
+                    exit 1
+                '''
+            }
+        }
+
+    } // end stages
+
+    post {
+        success {
+            echo """
+            ✅ Pipeline başarıyla tamamlandı!
+            ─────────────────────────────────────────
+            Build       : #${BUILD_NUMBER}
+            Image       : ${FULL_IMAGE}
+            Namespace   : ${K8S_NAMESPACE}
+            Deployment  : ${K8S_DEPLOYMENT}
+            App URL     : ${HEALTH_CHECK_URL}
+            Harbor      : https://${HARBOR_FQDN}/harbor/projects
+            ─────────────────────────────────────────
+            """
+        }
+        failure {
+            echo "❌ Pipeline başarısız! Build #${BUILD_NUMBER} — Jenkins loglarını incele. Deploy aşamasındaysa otomatik rollback denenmiş olmalı."
+        }
+        always {
+            echo "==> Dangling (sahipsiz) imajlar temizleniyor..."
+            sh 'docker image prune -f'   // -a YOK: sadece dangling sil, build cache kalsın
+            sh 'docker logout ${HARBOR_FQDN} || true'
+        }
+    }
+}
