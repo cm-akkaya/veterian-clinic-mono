@@ -7,11 +7,11 @@ pipeline {
 
         APP_NAME             = "veterian-clinic-mono"
         GIT_REPO_URL         = "https://github.com/cm-akkaya/veterian-clinic-mono"
-        GIT_BRANCH           = "main"
+        GIT_BRANCH           = "kubernetes"
 
         HARBOR_FQDN          = "172.17.160.76"
         HARBOR_PROJECT       = "ngn-list-vmware"
-        IMAGE_NAME           = "spring-ngn-app"
+        IMAGE_NAME           = "spring-ngn-app-prodk8s"
         IMAGE_TAG            = "${BUILD_NUMBER}"          // Her build'e unique tag
         FULL_IMAGE           = "${HARBOR_FQDN}/${HARBOR_PROJECT}/${IMAGE_NAME}:${IMAGE_TAG}"
 
