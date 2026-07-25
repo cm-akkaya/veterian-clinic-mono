@@ -3,6 +3,8 @@
 # Durdurma:  cd /var/lib/jenkins/jobs/ngn-list/jobs/ngn-dev/jobs/ngn-dev/workspace 
 # docker compose -f docker-compose.harbor.yml down
 # Yeni ile başlatma:  docker compose -f docker-compose.imageden.calıstir.yml up -d
+# İMAJLAR DOCKER HUB'DAKİ:  cmakkaya/ngn-springboot-with-postgresql:latest
+#                           cmakkaya/veterinary-clinic:DearingVetClinic
 
 services:
   app:
