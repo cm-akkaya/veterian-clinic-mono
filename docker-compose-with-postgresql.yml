@@ -4,6 +4,7 @@
 services:
   app:
     container_name: app
+    image: cmakkaya/ngn-springboot-with-postgresql
     build:
       context: .
       dockerfile: Dockerfile
