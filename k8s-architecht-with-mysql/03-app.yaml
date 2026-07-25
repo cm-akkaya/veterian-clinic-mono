@@ -31,26 +31,26 @@ spec:
               app: spring-ngn-app
       containers:
         - name: spring-ngn-app
-          image: cmakkaya/ngn-springboot-with-postgresql:latest
+          image: cmakkaya/ngn-springboot-with-mysql:latest
           imagePullPolicy: Always   # "latest" tag - her deploy'da guncel imaj cekilsin
           ports:
             - containerPort: 8080
               name: http
           env:
             - name: SPRING_PROFILES_ACTIVE
-              value: "postgres"
+              value: "mysql"
             - name: SPRING_DATASOURCE_URL
-              value: "jdbc:postgresql://postgres:5432/petclinic"
+              value: "jdbc:mysql://mysql:3306/petclinic?useSSL=false&allowPublicKeyRetrieval=true"
             - name: SPRING_DATASOURCE_USERNAME
               valueFrom:
                 secretKeyRef:
-                  name: petclinic-postgres-secret
-                  key: POSTGRES_USER
+                  name: petclinic-mysql-secret
+                  key: MYSQL_USER
             - name: SPRING_DATASOURCE_PASSWORD
               valueFrom:
                 secretKeyRef:
-                  name: petclinic-postgres-secret
-                  key: POSTGRES_PASSWORD
+                  name: petclinic-mysql-secret
+                  key: MYSQL_PASSWORD
           resources:
             requests:
               cpu: "250m"

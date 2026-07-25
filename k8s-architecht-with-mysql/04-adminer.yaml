@@ -22,12 +22,14 @@ spec:
             - containerPort: 8080
               name: http
           env:
-            # Login formunda "Server" alanını otomatik dolduran ayar.
-            # "postgres" burada k8s Service adı - pod DNS üzerinden çözüyor.
+            # Login formunda "Server" alanini otomatik dolduran ayar.
+            # "mysql" burada k8s Service adi - pod DNS uzerinden cozuyor.
             - name: ADMINER_DEFAULT_SERVER
-              value: "postgres"
+              value: "mysql"
             - name: ADMINER_DESIGN
               value: "pepa-linha"
+          # NOT: Adminer login formunda "System" (surucu) alanini elle "MySQL"
+          # olarak secmen gerekir - bunu otomatik atayan resmi bir env var yok.
           resources:
             requests:
               cpu: "50m"
