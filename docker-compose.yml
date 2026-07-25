@@ -1,3 +1,5 @@
+# Build.'de ettirmek için: docker compose -f docker-compose-with-mysql.yml up --build
+# Build.'de hatalı önbellekleri silerek build ettirmek için: docker compose -f docker-compose-with-mysql.yml up --build --force-recreate
 # Commands:  ./mvnw clean package -DskipTests  docker compose down   docker compose build app   docker compose up -d   
 services:
   app:
