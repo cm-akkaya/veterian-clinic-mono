@@ -1,7 +1,16 @@
 # Bu dosya Jenkins pipeline tarafından kullanılır.
 # Image'ı local build yerine Harbor'dan çeker.
-# Kullanım: IMAGE_TAG=42 HARBOR_FQDN=172.17.160.76 HARBOR_PROJECT=ngn-list-vmware docker compose -f docker-compose.harbor.yml up -d
-
+# Kullanım: export IMAGE_TAG=42
+#           export HARBOR_FQDN=172.17.160.76
+#           export HARBOR_PROJECT=ngn-list-vmware
+#           docker compose -f docker-compose.harbor.yml up -d
+# YADA TEK KOMUT: 
+# dev için bu yeterli:
+# IMAGE_TAG=dev-11 HARBOR_FQDN=172.17.160.76 HARBOR_PROJECT=ngn-list-vmware docker compose -f docker-compose.harbor.yml up -d
+# prod çalıştırmak için docker-compose.harbor.yml içindeki image satırını değiştir:  image: ${HARBOR_FQDN}/${HARBOR_PROJECT}/spring-ngn-app-prodk8s:${IMAGE_TAG}
+# IMAGE_TAG=prod-8 HARBOR_FQDN=172.17.160.76 HARBOR_PROJECT=ngn-list-vmware/spring-ngn-app-prodk8s docker compose -f docker-compose.harbor.yml up -d
+# Pull komutları:  docker pull 172.17.160.76/ngn-list-vmware/spring-ngn-app:dev-11
+#               docker pull 172.17.160.76/ngn-list-vmware/spring-ngn-app-prodk8s:prod-8
 services:
   app:
     image: ${HARBOR_FQDN}/${HARBOR_PROJECT}/spring-ngn-app:${IMAGE_TAG}

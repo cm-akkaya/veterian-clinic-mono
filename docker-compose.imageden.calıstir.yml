@@ -6,7 +6,7 @@
 
 services:
   app:
-    image: cmakkaya/veterinary-clinic:DearingVetClinic
+    image: veterian-mono-app:latest
     container_name: app
     restart: unless-stopped
     mem_limit: 512m
