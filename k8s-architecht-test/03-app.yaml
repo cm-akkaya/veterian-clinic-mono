@@ -1,0 +1,90 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: spring-ngn-app
+  namespace: ngn-springboot
+  labels:
+    app: spring-ngn-app
+spec:
+  replicas: 3
+  strategy:
+    type: RollingUpdate
+    rollingUpdate:
+      maxUnavailable: 0
+      maxSurge: 1
+  selector:
+    matchLabels:
+      app: spring-ngn-app
+  template:
+    metadata:
+      labels:
+        app: spring-ngn-app
+    spec:
+      imagePullSecrets:
+        - name: dockerhub-pull-secret   # public image oldugu icin gerekmiyor ama zarari yok
+      topologySpreadConstraints:
+        - maxSkew: 1
+          topologyKey: kubernetes.io/hostname
+          whenUnsatisfiable: ScheduleAnyway   # her worker'a 1'er tane tercih edilir, zorlamaz
+          labelSelector:
+            matchLabels:
+              app: spring-ngn-app
+      containers:
+        - name: spring-ngn-app
+          image: cmakkaya/ngn-springboot-with-postgresql:latest
+          imagePullPolicy: Always   # "latest" tag - her deploy'da guncel imaj cekilsin
+          ports:
+            - containerPort: 8080
+              name: http
+          env:
+            - name: SPRING_PROFILES_ACTIVE
+              value: "postgres"
+            - name: SPRING_DATASOURCE_URL
+              value: "jdbc:postgresql://postgres:5432/petclinic"
+            - name: SPRING_DATASOURCE_USERNAME
+              valueFrom:
+                secretKeyRef:
+                  name: petclinic-postgres-secret
+                  key: POSTGRES_USER
+            - name: SPRING_DATASOURCE_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: petclinic-postgres-secret
+                  key: POSTGRES_PASSWORD
+          resources:
+            requests:
+              cpu: "250m"
+              memory: "256Mi"
+            limits:
+              cpu: "500m"
+              memory: "512Mi"
+          readinessProbe:
+            httpGet:
+              path: /actuator/health
+              port: 8080
+            initialDelaySeconds: 30
+            periodSeconds: 10
+            timeoutSeconds: 5
+            failureThreshold: 6
+          livenessProbe:
+            httpGet:
+              path: /actuator/health
+              port: 8080
+            initialDelaySeconds: 45
+            periodSeconds: 20
+            timeoutSeconds: 5
+            failureThreshold: 3
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: spring-ngn-app
+  namespace: ngn-springboot
+spec:
+  selector:
+    app: spring-ngn-app
+  ports:
+    - port: 8080
+      targetPort: 8080
+      name: http
+  type: NodePort   # nodePort belirtilmedi -> k8s 30000-32767 araligindan otomatik atar, HAProxy zaten bu araligi worker'lara yonlendiriyor
