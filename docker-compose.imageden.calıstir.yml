@@ -1,10 +1,12 @@
 # Bu dosya Jenkins pipeline tarafından kullanılır.
 # Image'ı hazır oluşmuş image lardan alır.
-# Kullanım: IMAGE_TAG=42 HARBOR_FQDN=172.17.160.76 HARBOR_PROJECT=ngn-list-vmware docker compose -f docker-compose.imageden.calıstir.yml up -d
+# Durdurma:  cd /var/lib/jenkins/jobs/ngn-list/jobs/ngn-dev/jobs/ngn-dev/workspace 
+# docker compose -f docker-compose.harbor.yml down
+# Yeni ile başlatma:  docker compose -f docker-compose.imageden.calıstir.yml up -d
 
 services:
   app:
-    image: veterian-mono-app:latest
+    image: cmakkaya/veterinary-clinic:DearingVetClinic
     container_name: app
     restart: unless-stopped
     mem_limit: 512m
